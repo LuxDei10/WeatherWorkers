@@ -207,7 +207,7 @@ if mode == "Calendar overview":
             z="avg_temp", color_continuous_scale="RdYlBu_r",
         )
         fig.update_layout(**PLOT_LAYOUT, height=200)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
     if not cal_waves.empty:
         cal_waves["date"] = cal_waves["dt"].dt.date
@@ -229,7 +229,7 @@ if mode == "Calendar overview":
         ))
         fig.update_layout(**PLOT_LAYOUT, height=300,
                           yaxis_title="Avg Hs (m)", showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
         st.markdown('<div class="section-header">Max Wave Height & Peak Period</div>', unsafe_allow_html=True)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -240,7 +240,7 @@ if mode == "Calendar overview":
         fig.update_layout(**PLOT_LAYOUT, height=300)
         fig.update_yaxes(title_text="Max Hs (m)", secondary_y=False, gridcolor="#2a2a3a")
         fig.update_yaxes(title_text="Avg Period (s)", secondary_y=True, gridcolor="#2a2a3a")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
     st.stop()
 
@@ -310,7 +310,7 @@ if show_weather and not wdf.empty:
     fig.update_layout(**PLOT_LAYOUT, height=300, title_text="Temperature & Humidity")
     fig.update_yaxes(title_text="°C", secondary_y=False, gridcolor="#2a2a3a")
     fig.update_yaxes(title_text="Humidity %", secondary_y=True, gridcolor="#2a2a3a", range=[0, 110])
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
     # Wind speed + gusts
     fig = make_subplots(specs=[[{"secondary_y": False}]])
@@ -329,7 +329,7 @@ if show_weather and not wdf.empty:
     ))
     fig.update_layout(**PLOT_LAYOUT, height=250, title_text="Wind Speed & Gusts")
     fig.update_yaxes(title_text="km/h", gridcolor="#2a2a3a")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
     # Pressure + Rainfall
     col1, col2 = st.columns(2)
@@ -340,7 +340,7 @@ if show_weather and not wdf.empty:
             fillcolor="rgba(206,147,216,0.1)",
         ))
         fig.update_layout(**PLOT_LAYOUT, height=250, title_text="Pressure (hPa)")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     with col2:
         fig = go.Figure(go.Bar(
             x=wdf["dt"],
@@ -348,7 +348,7 @@ if show_weather and not wdf.empty:
             name="Rainfall (mm)", marker_color="#80cbc4",
         ))
         fig.update_layout(**PLOT_LAYOUT, height=250, title_text="Rainfall (mm)")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
     # Wind rose
     st.markdown('<div class="section-header">Wind Direction Rose</div>', unsafe_allow_html=True)
@@ -388,7 +388,7 @@ if show_weather and not wdf.empty:
         ),
         legend=dict(bgcolor="rgba(0,0,0,0)"),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 # ── Wave charts ───────────────────────────────────────────────────────────────
 if show_waves and not vdf.empty:
@@ -412,7 +412,7 @@ if show_waves and not vdf.empty:
     fig.update_layout(**PLOT_LAYOUT, height=320, title_text="Wave Height & Period")
     fig.update_yaxes(title_text="Height (m)", secondary_y=False, gridcolor="#2a2a3a")
     fig.update_yaxes(title_text="Period (s)", secondary_y=True, gridcolor="#2a2a3a")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
     # SST + Wave direction
     col1, col2 = st.columns(2)
@@ -423,17 +423,22 @@ if show_waves and not vdf.empty:
             fillcolor="rgba(239,83,80,0.1)",
         ))
         fig.update_layout(**PLOT_LAYOUT, height=250, title_text="Sea Surface Temperature (°C)")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     with col2:
         fig = go.Figure(go.Scatter(
             x=vdf["dt"], y=vdf["dir_deg"], name="Wave Dir (°)",
             mode="markers", marker=dict(color="#ba68c8", size=5),
         ))
-        fig.update_layout(**PLOT_LAYOUT, height=250, title_text="Wave Direction (°, clockwise from N)",
-                          yaxis=dict(range=[0, 360], gridcolor="#2a2a3a",
-                                     tickvals=[0,90,180,270,360],
-                                     ticktext=["N","E","S","W","N"]))
-        st.plotly_chart(fig, use_container_width=True)
+        fig.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0e1117",
+            font_color="#ccc", margin=dict(l=10, r=10, t=30, b=10),
+            legend=dict(bgcolor="rgba(0,0,0,0)"),
+            xaxis=dict(gridcolor="#2a2a3a", showgrid=True),
+            height=250, title_text="Wave Direction (°, clockwise from N)",
+            yaxis=dict(range=[0, 360], gridcolor="#2a2a3a",
+                       tickvals=[0,90,180,270,360],
+                       ticktext=["N","E","S","W","N"]))
+        st.plotly_chart(fig, width='stretch')
 
     # Wave direction rose
     st.markdown('<div class="section-header">Wave Direction Rose</div>', unsafe_allow_html=True)
@@ -464,7 +469,7 @@ if show_waves and not vdf.empty:
         ),
         legend=dict(bgcolor="rgba(0,0,0,0)"),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 # ── Tide chart ────────────────────────────────────────────────────────────────
 if show_tides and not tdf.empty:
@@ -504,7 +509,7 @@ if show_tides and not tdf.empty:
     ))
     fig.update_layout(**PLOT_LAYOUT, height=300, title_text="Tide Predictions (AEST)")
     fig.update_yaxes(title_text="Height (m)", gridcolor="#2a2a3a")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 # ── Correlation ───────────────────────────────────────────────────────────────
 if show_waves and show_weather and not vdf.empty and not wdf.empty:
@@ -526,7 +531,7 @@ if show_waves and show_weather and not vdf.empty and not wdf.empty:
                                  "tp_s": "Peak Period (s)"},
                          title="Wind Speed vs Wave Height")
         fig.update_layout(**PLOT_LAYOUT, height=320)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     with col2:
         fig = px.scatter(merged, x="temp_c", y="sst_c",
                          color="hs_m", color_continuous_scale="Blues",
@@ -535,4 +540,4 @@ if show_waves and show_weather and not vdf.empty and not wdf.empty:
                                  "hs_m": "Hs (m)"},
                          title="Air Temp vs Sea Surface Temp")
         fig.update_layout(**PLOT_LAYOUT, height=320)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
