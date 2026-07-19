@@ -73,7 +73,7 @@ def fetch_available_dates():
 @st.cache_data(ttl=300)
 def fetch_weather(date_str):
     try:
-        r = requests.get(f"{WEATHER_BASE}/data/{date_str}", timeout=10)
+        r = requests.get(f"{WEATHER_BASE}/data/{date_str}.json", timeout=10)
         if r.ok:
             df = pd.DataFrame(r.json())
             df["dt"] = pd.to_datetime(df["local_date_time"], format="%Y%m%d%H%M%S")
@@ -100,7 +100,7 @@ def fetch_tides(date_str):
         r = requests.get(f"{WAVE_BASE}/tides/{date_str}", timeout=10)
         if r.ok:
             df = pd.DataFrame(r.json())
-            df["dt"] = pd.to_datetime(df["datetime_aest"])
+            df["dt"] = pd.to_datetime(df["datetime_aest"]).dt.tz_localize(None)
             df = df.sort_values("dt").reset_index(drop=True)
             return df
     except Exception: pass
@@ -283,8 +283,7 @@ if not wdf.empty or not vdf.empty:
         i += 1
     if not vdf.empty:
         with cols[i % 4]:
-            metric_card("Avg Wave Ht (Hs)", fmt(vdf["hs_m"].mean(), " m"),
-                        f"Max {fmt(vdf['hs_m'].max(), ' m')}")
+            metric_card("Avg Wave Ht (Hs)", f"{fmt(vdf['hs_m'].mean(), ' m')}  ·  Max {fmt(vdf['hs_m'].max(), ' m')}")
         i += 1
         with cols[i % 4]:
             metric_card("Max Wave (Hmax)", fmt(vdf["hmax_m"].max(), " m"))
@@ -414,17 +413,23 @@ if show_waves and not vdf.empty:
     fig.update_yaxes(title_text="Period (s)", secondary_y=True, gridcolor="#2a2a3a")
     st.plotly_chart(fig, width='stretch')
 
-    # SST + Wave direction
-    col1, col2 = st.columns(2)
-    with col1:
-        fig = go.Figure(go.Scatter(
-            x=vdf["dt"], y=vdf["sst_c"], name="SST (°C)",
-            line=dict(color="#ef5350", width=2), fill="tozeroy",
-            fillcolor="rgba(239,83,80,0.1)",
-        ))
-        fig.update_layout(**PLOT_LAYOUT, height=250, title_text="Sea Surface Temperature (°C)")
-        st.plotly_chart(fig, width='stretch')
-    with col2:
+    # SST
+    sst_min = vdf["sst_c"].min()
+    sst_max = vdf["sst_c"].max()
+    sst_buf = max((sst_max - sst_min) * 0.5, 0.5)
+    fig = go.Figure(go.Scatter(
+        x=vdf["dt"], y=vdf["sst_c"], name="SST (°C)",
+        line=dict(color="#ef5350", width=2), fill="tozeroy",
+        fillcolor="rgba(239,83,80,0.1)",
+    ))
+    fig.update_layout(**PLOT_LAYOUT, height=250, title_text="Sea Surface Temperature (°C)",
+                      yaxis=dict(range=[sst_min - sst_buf, sst_max + sst_buf], gridcolor="#2a2a3a"))
+    st.plotly_chart(fig, width='stretch')
+
+    # Wave direction scatter + rose side by side
+    st.markdown('<div class="section-header">Wave Direction</div>', unsafe_allow_html=True)
+    dir_col1, dir_col2 = st.columns(2)
+    with dir_col1:
         fig = go.Figure(go.Scatter(
             x=vdf["dt"], y=vdf["dir_deg"], name="Wave Dir (°)",
             mode="markers", marker=dict(color="#ba68c8", size=5),
@@ -434,41 +439,39 @@ if show_waves and not vdf.empty:
             font_color="#ccc", margin=dict(l=10, r=10, t=30, b=10),
             legend=dict(bgcolor="rgba(0,0,0,0)"),
             xaxis=dict(gridcolor="#2a2a3a", showgrid=True),
-            height=250, title_text="Wave Direction (°, clockwise from N)",
+            height=380, title_text="Direction over Time (°)",
             yaxis=dict(range=[0, 360], gridcolor="#2a2a3a",
                        tickvals=[0,90,180,270,360],
                        ticktext=["N","E","S","W","N"]))
         st.plotly_chart(fig, width='stretch')
-
-    # Wave direction rose
-    st.markdown('<div class="section-header">Wave Direction Rose</div>', unsafe_allow_html=True)
-    vdf_dir = vdf.dropna(subset=["dir_deg", "hs_m"])
-    hs_bins  = [0, 0.5, 1.0, 1.5, 2.0, 10]
-    hs_labels = ["0–0.5m", "0.5–1m", "1–1.5m", "1.5–2m", "2m+"]
-    vdf_dir = vdf_dir.copy()
-    vdf_dir["hs_bin"] = pd.cut(vdf_dir["hs_m"], bins=hs_bins, labels=hs_labels)
-    fig = go.Figure()
-    colors = ["#e3f2fd","#90caf9","#42a5f5","#1565c0","#0d47a1"]
-    for lbl, color in zip(hs_labels, colors):
-        subset = vdf_dir[vdf_dir["hs_bin"] == lbl]
-        if not subset.empty:
-            fig.add_trace(go.Barpolar(
-                r=[1] * len(subset), theta=subset["dir_deg"],
-                name=lbl, marker_color=color, opacity=0.85,
-            ))
-    fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0e1117",
-        font_color="#ccc", height=380,
-        polar=dict(
-            bgcolor="#0e1117",
-            radialaxis=dict(visible=False),
-            angularaxis=dict(direction="clockwise", tickmode="array",
-                             tickvals=[0,45,90,135,180,225,270,315],
-                             ticktext=["N","NE","E","SE","S","SW","W","NW"],
-                             gridcolor="#2a2a3a"),
-        ),
-        legend=dict(bgcolor="rgba(0,0,0,0)"),
-    )
+    with dir_col2:
+        vdf_dir = vdf.dropna(subset=["dir_deg", "hs_m"])
+        hs_bins  = [0, 0.5, 1.0, 1.5, 2.0, 10]
+        hs_labels = ["0–0.5m", "0.5–1m", "1–1.5m", "1.5–2m", "2m+"]
+        vdf_dir = vdf_dir.copy()
+        vdf_dir["hs_bin"] = pd.cut(vdf_dir["hs_m"], bins=hs_bins, labels=hs_labels)
+        fig = go.Figure()
+        colors = ["#e3f2fd","#90caf9","#42a5f5","#1565c0","#0d47a1"]
+        for lbl, color in zip(hs_labels, colors):
+            subset = vdf_dir[vdf_dir["hs_bin"] == lbl]
+            if not subset.empty:
+                fig.add_trace(go.Barpolar(
+                    r=[1] * len(subset), theta=subset["dir_deg"],
+                    name=lbl, marker_color=color, opacity=0.85,
+                ))
+        fig.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0e1117",
+            font_color="#ccc", height=380,
+            polar=dict(
+                bgcolor="#0e1117",
+                radialaxis=dict(visible=False),
+                angularaxis=dict(direction="clockwise", tickmode="array",
+                                 tickvals=[0,45,90,135,180,225,270,315],
+                                 ticktext=["N","NE","E","SE","S","SW","W","NW"],
+                                 gridcolor="#2a2a3a"),
+            ),
+            legend=dict(bgcolor="rgba(0,0,0,0)"),
+        )
     st.plotly_chart(fig, width='stretch')
 
 # ── Tide chart ────────────────────────────────────────────────────────────────
