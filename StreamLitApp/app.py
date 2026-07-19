@@ -417,21 +417,40 @@ if show_waves and not vdf.empty:
 if show_tides and not tdf.empty:
     st.markdown('<div class="section-header">🌊 Tides — Tin Can Bay Approaches</div>', unsafe_allow_html=True)
 
-    # Interpolate per day to avoid connecting across day gaps
+    # Cosine interpolation between tide events for natural tidal curve
     tdf_sorted = tdf.sort_values("dt").reset_index(drop=True)
+    ts_all = tdf_sorted["dt"].apply(lambda x: x.timestamp()).values
+    hs_all = tdf_sorted["height_m"].values
+
     dense_dts, dense_hs = [], []
-    for day, group in tdf_sorted.groupby(tdf_sorted["dt"].dt.date):
-        if len(group) < 2:
-            continue
-        # Use .timestamp() for correct float seconds since epoch
-        ts = group["dt"].apply(lambda x: x.timestamp()).values
-        hs = group["height_m"].values
-        d_ts = np.linspace(ts.min(), ts.max(), 200)
-        d_hs = np.interp(d_ts, ts, hs)
-        dense_dts.extend([pd.Timestamp.fromtimestamp(t) for t in d_ts])
-        dense_hs.extend(d_hs.tolist())
-        dense_dts.append(None)  # break line between days
-        dense_hs.append(None)
+    for i in range(len(ts_all) - 1):
+        t0, t1 = ts_all[i], ts_all[i + 1]
+        h0, h1 = hs_all[i], hs_all[i + 1]
+        # 100 points per segment
+        seg_ts = np.linspace(t0, t1, 100)
+        # Cosine interpolation: mu goes 0→1, cosine eases between h0 and h1
+        mu = (seg_ts - t0) / (t1 - t0)
+        mu2 = (1 - np.cos(mu * np.pi)) / 2
+        seg_hs = h0 * (1 - mu2) + h1 * mu2
+        dense_dts.extend([pd.Timestamp.fromtimestamp(t) for t in seg_ts])
+        dense_hs.extend(seg_hs.tolist())
+    # Add break if segments span more than 18h (gap between fetched days)
+    # Rebuild with per-gap breaks
+    dense_dts2, dense_hs2 = [], []
+    for i in range(len(ts_all) - 1):
+        t0, t1 = ts_all[i], ts_all[i + 1]
+        h0, h1 = hs_all[i], hs_all[i + 1]
+        seg_ts = np.linspace(t0, t1, 100)
+        mu = (seg_ts - t0) / (t1 - t0)
+        mu2 = (1 - np.cos(mu * np.pi)) / 2
+        seg_hs = h0 * (1 - mu2) + h1 * mu2
+        # If gap > 18h, insert a break so line doesn't connect across days
+        if (t1 - t0) > 18 * 3600:
+            dense_dts2.append(None)
+            dense_hs2.append(None)
+        dense_dts2.extend([pd.Timestamp.fromtimestamp(t) for t in seg_ts])
+        dense_hs2.extend(seg_hs.tolist())
+    dense_dts, dense_hs = dense_dts2, dense_hs2
 
     highs = tdf_sorted[tdf_sorted["type"] == "high"]
     lows  = tdf_sorted[tdf_sorted["type"] == "low"]
