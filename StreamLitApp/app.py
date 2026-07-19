@@ -303,11 +303,15 @@ if show_weather and not wdf.empty:
 
     c1, c2 = st.columns(2)
     with c1:
-        fig = go.Figure(go.Scatter(x=wdf["dt"],
-                                   y=pd.to_numeric(wdf["pressure_hpa"], errors="coerce"),
+        press = pd.to_numeric(wdf["pressure_hpa"], errors="coerce")
+        p_min, p_max = press.min(), press.max()
+        p_buf = max((p_max - p_min) * 0.5, 1.0)
+        fig = go.Figure(go.Scatter(x=wdf["dt"], y=press,
                                    line=dict(color="#ce93d8", width=2),
                                    fill="tozeroy", fillcolor="rgba(206,147,216,0.1)"))
-        fig.update_layout(**base_layout(250, "Pressure (hPa)"))
+        layout = base_layout(250, "Pressure (hPa)")
+        layout["yaxis"] = dict(range=[p_min - p_buf, p_max + p_buf], gridcolor="#2a2a3a")
+        fig.update_layout(**layout)
         st.plotly_chart(fig, width="stretch")
     with c2:
         fig = go.Figure(go.Bar(x=wdf["dt"],
@@ -413,19 +417,30 @@ if show_waves and not vdf.empty:
 if show_tides and not tdf.empty:
     st.markdown('<div class="section-header">🌊 Tides — Tin Can Bay Approaches</div>', unsafe_allow_html=True)
 
-    tide_ts = tdf["dt"].values.astype("int64") / 1e9
-    tide_h  = tdf["height_m"].values
-    dense_ts = np.linspace(tide_ts.min(), tide_ts.max(), 500)
-    dense_h  = np.interp(dense_ts, tide_ts, tide_h)
-    dense_dt = pd.to_datetime(dense_ts * 1e9)
+    # Interpolate per day to avoid connecting across day gaps
+    tdf_sorted = tdf.sort_values("dt").reset_index(drop=True)
+    dense_dts, dense_hs = [], []
+    for day, group in tdf_sorted.groupby(tdf_sorted["dt"].dt.date):
+        if len(group) < 2:
+            continue
+        # Use .timestamp() for correct float seconds since epoch
+        ts = group["dt"].apply(lambda x: x.timestamp()).values
+        hs = group["height_m"].values
+        d_ts = np.linspace(ts.min(), ts.max(), 200)
+        d_hs = np.interp(d_ts, ts, hs)
+        dense_dts.extend([pd.Timestamp.fromtimestamp(t) for t in d_ts])
+        dense_hs.extend(d_hs.tolist())
+        dense_dts.append(None)  # break line between days
+        dense_hs.append(None)
 
-    highs = tdf[tdf["type"] == "high"]
-    lows  = tdf[tdf["type"] == "low"]
+    highs = tdf_sorted[tdf_sorted["type"] == "high"]
+    lows  = tdf_sorted[tdf_sorted["type"] == "low"]
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=dense_dt, y=dense_h, name="Tide height (m)",
+    fig.add_trace(go.Scatter(x=dense_dts, y=dense_hs, name="Tide height (m)",
                              fill="tozeroy", fillcolor="rgba(100,181,246,0.15)",
-                             line=dict(color="#64b5f6", width=2)))
+                             line=dict(color="#64b5f6", width=2),
+                             connectgaps=False))
     fig.add_trace(go.Scatter(x=highs["dt"], y=highs["height_m"],
                              mode="markers+text", name="High tide",
                              marker=dict(color="#ff7043", size=10, symbol="triangle-up"),
