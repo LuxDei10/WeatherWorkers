@@ -112,9 +112,8 @@ def fetch_tides(date_str):
         if r.ok:
             df = pd.DataFrame(r.json())
             # Strip timezone offset so pandas reads as naive local time
-            df["dt"] = pd.to_datetime(
-                df["datetime_aest"].str.replace(r"\+\d{2}:\d{2}$", "", regex=True)
-            )
+            # Parse "2026-07-19T06:01:00+10:00" — slice first 19 chars to keep AEST local time
+            df["dt"] = pd.to_datetime(df["datetime_aest"].str[:19])
             return df.sort_values("dt").reset_index(drop=True)
     except Exception: pass
     return pd.DataFrame()
@@ -447,22 +446,44 @@ if show_waves and show_weather and not vdf.empty and not wdf.empty:
     vdf_r = vdf.set_index("dt").resample("30min").mean(numeric_only=True).reset_index()
     merged = pd.merge_asof(vdf_r.sort_values("dt"), wdf_r.sort_values("dt"),
                            on="dt", tolerance=pd.Timedelta("30min"), direction="nearest")
-    merged = merged.dropna(subset=["hs_m","wind_speed_kmh","temp_c"])
 
-    cc1, cc2 = st.columns(2)
+    CORR_COLS = {
+        "Sig. Wave Height (Hs)": "hs_m",
+        "Max Wave Height (Hmax)": "hmax_m",
+        "Peak Period (Tp)": "tp_s",
+        "Zero-crossing Period (Tz)": "tz_s",
+        "Wave Direction (°)": "dir_deg",
+        "Sea Surface Temp (°C)": "sst_c",
+        "Air Temp (°C)": "temp_c",
+        "Feels Like (°C)": "feels_like_c",
+        "Humidity (%)": "humidity_pct",
+        "Wind Speed (km/h)": "wind_speed_kmh",
+        "Wind Gust (km/h)": "wind_gust_kmh",
+        "Pressure (hPa)": "pressure_hpa",
+    }
+    available = {k: v for k, v in CORR_COLS.items() if v in merged.columns and merged[v].notna().any()}
+    col_labels = list(available.keys())
+
+    cc1, cc2, cc3 = st.columns(3)
     with cc1:
-        fig = px.scatter(merged, x="wind_speed_kmh", y="hs_m", color="tp_s",
-                         color_continuous_scale="Blues",
-                         labels={"wind_speed_kmh":"Wind Speed (km/h)",
-                                 "hs_m":"Sig. Wave Height (m)", "tp_s":"Peak Period (s)"},
-                         title="Wind Speed vs Wave Height")
-        fig.update_layout(**base_layout(320))
-        st.plotly_chart(fig, width="stretch")
+        x_label = st.selectbox("X axis", col_labels, index=col_labels.index("Wind Speed (km/h)") if "Wind Speed (km/h)" in col_labels else 0)
     with cc2:
-        fig = px.scatter(merged, x="temp_c", y="sst_c", color="hs_m",
+        y_label = st.selectbox("Y axis", col_labels, index=col_labels.index("Sig. Wave Height (Hs)") if "Sig. Wave Height (Hs)" in col_labels else 1)
+    with cc3:
+        c_label = st.selectbox("Colour by", col_labels, index=col_labels.index("Peak Period (Tp)") if "Peak Period (Tp)" in col_labels else 2)
+
+    x_col = available[x_label]
+    y_col = available[y_label]
+    c_col = available[c_label]
+
+    plot_df = merged[[x_col, y_col, c_col, "dt"]].dropna()
+    if not plot_df.empty:
+        fig = px.scatter(plot_df, x=x_col, y=y_col, color=c_col,
                          color_continuous_scale="Blues",
-                         labels={"temp_c":"Air Temp (°C)",
-                                 "sst_c":"Sea Surface Temp (°C)", "hs_m":"Hs (m)"},
-                         title="Air Temp vs Sea Surface Temp")
-        fig.update_layout(**base_layout(320))
+                         hover_data={"dt": True},
+                         labels={x_col: x_label, y_col: y_label, c_col: c_label},
+                         title=f"{x_label} vs {y_label}")
+        fig.update_layout(**base_layout(400))
         st.plotly_chart(fig, width="stretch")
+    else:
+        st.info("Not enough overlapping data for the selected columns.")
