@@ -40,27 +40,32 @@ st.markdown("""
 # ── Data fetching ─────────────────────────────────────────────────────────────
 @st.cache_data(ttl=300)
 def fetch_available_dates():
+    import re
+    date_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+    def extract(keys, prefix):
+        result = set()
+        for key in keys:
+            d = key.replace(prefix, "").replace(".json", "").strip()
+            if date_re.match(d):
+                result.add(d)
+        return result
+
     weather_dates, wave_dates, tide_dates = set(), set(), set()
     try:
         r = requests.get(f"{WEATHER_BASE}/list", timeout=10)
         if r.ok:
-            for key in r.json():
-                d = key.replace("WeatherStation/", "").replace(".json", "")
-                weather_dates.add(d)
+            weather_dates = extract(r.json(), "WeatherStation/")
     except Exception: pass
     try:
         r = requests.get(f"{WAVE_BASE}/list/waves", timeout=10)
         if r.ok:
-            for key in r.json():
-                d = key.replace("WaveBuoy/", "").replace(".json", "")
-                wave_dates.add(d)
+            wave_dates = extract(r.json(), "WaveBuoy/")
     except Exception: pass
     try:
         r = requests.get(f"{WAVE_BASE}/list/tides", timeout=10)
         if r.ok:
-            for key in r.json():
-                d = key.replace("Tides/", "").replace(".json", "")
-                tide_dates.add(d)
+            tide_dates = extract(r.json(), "Tides/")
     except Exception: pass
     all_dates = sorted(weather_dates | wave_dates | tide_dates, reverse=True)
     return all_dates, weather_dates, wave_dates, tide_dates
